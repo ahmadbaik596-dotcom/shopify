@@ -1021,54 +1021,49 @@ async def validate_card(cc, month, year, cvv, site_url, variant_id=None, proxy_s
 
 app = FastAPI()
 
-# Helper function untuk pastikan Price dan Time tu dalam format nombor (float)
-def parse_to_float(value):
-    try:
-        return float(str(value).replace('s', '').strip())
-    except:
-        return 0.0
 
-# =====================================================================
-# INI BAHAGIAN YANG AWAK KENA TUKAR (TEMPLATE JSON SAHAJA)
-# =====================================================================
 @app.get("/shopify")
-async def shopify_validator(site: str = Query(...), cc: str = Query(...)):
-    start_time = time.time()
+async def shopify_api(
+    site: str = Query(...),
+    cc: str = Query(...),
+    proxy: str = Query(None)
+):
+    """
+    Validate a card against a Shopify store.
+    Query params:
+      - site: Shopify store URL (required)
+      - cc: Card in CC|MM|YYYY|CVV format (required)
+      - proxy: 'true' to use dynamic proxy, or pass direct host:port:user:pass proxy
+    """
+    parts = cc.replace(" ", "").split("|")
+    if len(parts) != 4:
+        return JSONResponse({"error": "CC format: CC|MM|YYYY|CVV"}, status_code=400)
     
-    # -----------------------------------------------------------------
-    # MASUKKAN SEMULA CODE LOGIC ASAL AWAK KAT SINI (Jangan tukar logik dia)
-    # Contoh:
-    # result = await validate_shopify_card(site, cc)
-    # gateway = result.get("Gate")
-    # response_status = result.get("Response")
-    # price = result.get("Price")
-    # is_approved = result.get("Approved")
-    # -----------------------------------------------------------------
-    
-    # *NOTA: Gantikan variable dibawah ini dengan variable asal dari logic awak.
-    # Aku letak variable dummy ni supaya code tak error masa awak copy-paste.
-    response_status = "CAPTCHA_REQUIRED" 
-    price = "16.41"                     
-    gateway = "Shopify Payments"        
-    is_approved = False                 
+    cc_num, mon, yr, cvv = parts
+    if len(yr) == 4 and yr.startswith("20"):
+        yr = yr[2:]
 
-    elapsed_time = round(time.time() - start_time, 2)
+    proxy_to_use = None
+    if proxy:
+        if proxy.lower() == "true":
+            proxy_to_use = await fetch_pvt_proxy()
+        elif proxy.lower() == "false":
+            proxy_to_use = None
+        else:
+            proxy_to_use = proxy
 
-    # Tukar Price dan Time kepada format nombor (Float)
-    price_float = parse_to_float(price)
-    time_float = parse_to_float(elapsed_time)
+    result = await validate_card(
+        cc=cc_num,
+        month=mon,
+        year=yr,
+        cvv=cvv,
+        site_url=site,
+        proxy_str=proxy_to_use,
+        max_retries=1,
+        max_price=8.0
+    )
+    return JSONResponse(result)
 
-    # Template JSON baru yang awak minta
-    custom_json_response = {
-        "Gateway": gateway,
-        "Price": price_float,
-        "Response": response_status,
-        "Status": is_approved,
-        "Time": time_float,
-        "cc": cc
-    }
-    
-    return JSONResponse(content=custom_json_response)
 
 @app.get("/health")
 async def health():
